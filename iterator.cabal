@@ -1,0 +1,17 @@
+name:                  essence-iterator
+version:               0.0.1
+license:               AllRightsReserved
+copyright:             (c) 2014 Ambiata
+cabal-version:         >= 1.8
+build-type:            Simple
+
+library
+  build-depends:
+                       base                            >= 3          && < 5
+                     , mtl                             == 2.2.*
+
+  ghc-options:         -Wall -O2
+
+  hs-source-dirs:
+                       src
+
