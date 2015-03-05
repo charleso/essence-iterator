@@ -1,17 +1,25 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveFunctor #-}
 module Essence where
 
+-- Someone has done the same thing here
+-- https://gist.github.com/k0001/4500051
+
 import           Control.Applicative
-import           Control.Monad.State
+import           Control.Monad.State hiding (sequence)
 import           Data.Monoid hiding (Product)
+import           Data.Foldable
 import           Data.Traversable
 import           Data.Functor.Compose
 import           Data.Functor.Identity
 import           Data.Functor.Product
+import           Prelude hiding (sequence)
 
 main = putStrLn "hello"
 
@@ -92,6 +100,9 @@ shape = traverse shapeBody
 x :: (Functor m, Functor n) => (a -> m b) -> (a -> n b) -> (a -> Product m n b)
 x f g y = Pair (f y) (g y)
 
+o :: (Functor m, Functor n) => (b -> n c) -> (a -> m b) -> (a -> Compose m n c)
+o f g = Compose . fmap f . g
+
 decomposeSlow :: Traversable t => t a -> (Product Identity (Const [a]) (t ()))
 decomposeSlow = (x) shape contents
 
@@ -123,3 +134,66 @@ label = disperse step (curry snd)
 
 step :: State Integer Integer
 step = get >>= \n -> put (n + 1) >> pure n
+
+-- 4.3 Backwards traversal
+
+newtype Backwards m a = Backwards { runBackwards :: m a } deriving Functor
+
+instance Applicative m => Applicative (Backwards m) where
+  pure = Backwards . pure
+  f <*> x = Backwards (flip ($) <$> runBackwards x <*> runBackwards f)
+
+data AppAdapter m where
+  AppAdapter :: Applicative (g m) => (forall a. m a -> g m a) -> (forall a. g m a -> m a) -> AppAdapter m
+
+backwards :: Applicative m => AppAdapter m
+backwards = AppAdapter Backwards runBackwards
+
+ptraverse :: (Applicative m, Traversable t) => AppAdapter m -> (a -> m b) -> t a -> m (t b)
+ptraverse (AppAdapter insert retrieve) f = retrieve . traverse (insert . f)
+
+lebal :: (Traversable t) => t a -> State Integer (t Integer)
+lebal = ptraverse backwards (const step)
+
+-- -5.4 Sequential composition of monadic traversals
+
+update1 :: a -> State Integer a
+update1 x = get >>= \var -> put (var * 2) >> pure x
+
+update2 :: a -> State Integer a
+update2 x = get >>= \var -> put (var + 1) >> pure x
+
+monadicUpdate1 :: (Traversable t) => t a -> State Integer (t a)
+monadicUpdate1 = traverse update1 >=> traverse update2
+
+monadicUpdate2 :: (Traversable t) => t a -> State Integer (t a)
+monadicUpdate2 = traverse (update1 >=> update2)
+
+applicativeUpdate1 :: (Traversable t) => t a -> State Integer (State Integer (t a))
+applicativeUpdate1 = getCompose . (traverse update1 `o` traverse update2)
+
+applicativeUpdate2 :: (Traversable t) => t a -> State Integer (State Integer (t a))
+applicativeUpdate2 = getCompose . traverse (update1 `o` update2)
+
+
+-- 5.5 No duplication of elements
+
+newtype BadList a = BadList { unBadList :: [a] } deriving (Functor, Foldable, Show, Eq)
+
+instance Traversable BadList where
+  traverse _ (BadList []) = pure (BadList [])
+  traverse f (BadList (x : xs)) = fmap BadList ((const (:)) <$> f x <*> f x <*> traverse f xs)
+
+index :: Traversable t => t a -> (t Integer, Integer)
+index xs = run label xs 0
+
+newtype Pair a = P (a, a) deriving (Show, Eq, Functor)
+
+instance Applicative Pair where
+  pure a = P (a,a)
+  P (f, f') <*> P (a, a') = P (f a, f' a')
+
+instance Coerce (Pair a) (a,a) where
+  down (P x) = x
+  up = P
+

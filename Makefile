@@ -26,7 +26,7 @@ repl: ${DEPS}
 	cabal repl
 
 quick: ${DEPS}
-	ghci -DNAPOLEON_DEV_MODE=true -package-db=$(wildcard ${SANDBOX}/*-packages.conf.d) -isrc -itest src/Essence.hs
+	ghci -DNAPOLEON_DEV_MODE=true -package-db=$(wildcard ${SANDBOX}/*-packages.conf.d) -isrc -itest src/Essence.hs src/WordCount.hs
 
 tags:
 	hasktags -e src test main

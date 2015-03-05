@@ -1,0 +1,275 @@
+1 Introduction
+
+public static int loophMyObji (IEnumerablehMyObji coll){
+	int n = 0;
+	foreach (MyObj obj in coll){
+	  n = n+ 1;
+	  obj.touch ();
+	}
+	return n;
+}
+
+In this paper, we investigate the structure of iterations over collection elements like that
+shown in Figure 1. We emphasize that we want to capture both aspects of the method loop
+and iterations like it: mapping over the elements, and simultaneously accumulating some
+measure of those elements.
+
+-----
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2.3 Monadic map
+
+mapM :: Monad m ⇒ (a → m b) → ([a] → m [b])
+sequence ::Monad m ⇒ [m a] → m [a]
+
+Moreover, it is well known
+(Jones & Duponcheel, 1993; King & Wadler, 1993) that monads do not compose in
+general, whereas applicative functors do; this will give us a richer algebra of traversals.
+Finally, monadic maps stumble over products, for which there are two reasonable but
+symmetric definitions, coinciding only when the monad is commutative. This stumbling
+block forces either a bias to left or right, or a restricted focus on commutative monads, or
+an additional complicating parametrisation; in contrast, applicative functors generally have
+no such problem, and in fact can exploit it to provide traversal reversal.
+
+
+
+
+
+
+
+
+
+
+
+
+----
+
+3.2 Monoidal applicative functors
+
+---
+
+A second family of applicative functors, this time non-monadic, arises
+from constant functors with monoidal targets. McBride and Paterson call these phantom
+applicative functors, because the resulting type is a phantom type, as opposed to a container
+type of some kind.
+
+----
+
+Therefore, lists form applicative functors in three different ways: monadic in the usual way
+using cartesian product, when they model non-deterministic evaluation; monoidal using
+concatenation, when they model tracing of outputs; and Naperian-inspired using zip, when
+they model data-parallel computations.
+
+---
+
+3.3 Combining applicative functors
+
+Like monads, applicative functors are closed under products; so two independent idiomatic
+effects can generally be fused into one, their product
+
+data (m⊠n) a = Prod{pfst ::m a,psnd :: n a}
+
+Unlike monads in general, applicative functors are also closed under composition; so
+two sequentially-dependent idiomatic effects can generally be fused into one, their composition.
+data (mn) a = Comp{unComp::m (n a)}
+
+---
+
+3.4 Idiomatic traversal
+
+traverseList ::Applicative m ⇒ (a → m b) → [a] → m [b]
+distList ::Applicative m ⇒ [m a] → m [a]
+
+
+In the case of a monadic applicative functor, traversal specialises to monadic map,
+and has the same uses. In fact, traversal is really just a slight generalisation of monadic
+map: generalising in the sense that it applies also to non-monadic applicative functors. We
+consider this an interesting insight, because it reveals that monadic map does not require
+the full power of a monad; in particular, it does not require the ‘bind’ or ‘join’ operators,
+which are unavailable in applicative functors in general
+
+---
+
+4 Traversals as iterators
+
+class Coerce a b | a → b where
+⇓:: a → b
+⇑:: b → a
+
+---
+
+ Of course, it is trivial to compose them in parallel
+to obtain both halves of the decomposition as a single function, but doing this by tupling
+in the obvious way
+...
+Is it possible to fuse the two traversals into
+one? The product of applicative functors allows exactly this, and Section 5.3 justifies this
+decomposition of a data structure into shape and contents in a single pass:
+
+---
+
+A similar benefit can be found in the reassembly of a full data structure from separate
+shape and contents. This is a stateful operation, where the state consists of the contents
+to be inserted; but it is also a partial operation, because the number of elements provided
+may be less than the number of positions in the shape. We therefore make use of both the
+State monad and the Maybe monad, and so we incorporate these two in our framework for
+coercions:
+
+---
+
+4.1 Shape and contents
+
+This time, we form the composition of the functors, rather than their product. (As it
+happens, the composition of the State and Maybe monads in this way does in fact form
+another monad, but that is not the case for monads in general.)
+The central operation in the solution is the partial stateful f
+
+---
+
+TODO WHAT DOES THIS MEAN?
+
+Moreover, traversal of any data structure may be expressed in terms of list-based traversal
+of its contents:
+
+
+---
+
+5.1 Free theorems of traversal
+
+dist ◦ fmap (fmap k) = fmap (fmap k) ◦ dist
+
+traverse (g ◦ h) = traverse g ◦ fmap h
+traverse (fmap k ◦ f) = fmap (fmap k) ◦ traverse f
+
+These laws are not constraints on the implementation of dist and traverse; they follow
+automatically from their types.
+
+---
+
+5.2 Sequential composition of traversals
+
+traverse (Comp ◦ fmap f ◦ g) = Comp ◦ fmap (traverse f) ◦ traverse g
+
+
+---
+
+5.3 Idiomatic naturality
+
+distn
+◦ fmap φ = φ ◦ distm
+
+One consequence of this naturality property is a ‘purity law’:
+traverse pure = pure
+
+instance Traversable Tree where
+traverse f (Leaf a) = pure Leaf ⊛f a
+traverse f (Bin t u) = pure Bin⊛traverse f u⊛traverse f t
+
+
+On the other hand, the following definition, in which the traversals of the two children
+are swapped, but the Bin operator is flipped to compensate, is blameless. The purity law still
+applies, and the corresponding distributor is natural in the applicative functor; the effect of
+the reversal is that elements of the tree are traversed ‘from right to left’.
+
+instance Traversable Tree where
+traverse f (Leaf a) = pure Leaf ⊛f a
+traverse f (Bin t u) = pure (flip Bin) ⊛ traverse f u ⊛ traverse f t
+
+We consider this to be a reasonable, if rather odd, definition of traverse.
+
+---
+
+5.4 Sequential composition of monadic traversals
+
+Because update1
+and update2 do not commute, monadic1 6= monadic2 in general; nevertheless,
+applicative1 = applicative2
+. The only advantage of the monadic law is that there
+is just one level of monad on both sides of the equation; in contrast, the idiomatic law has
+two levels of applicative functor, because there is no analogue of the ‘join’ operator µ.
+
+
+---
+
+
+5.5 No duplication of elements
+
+instance Traversable [ ] where
+traverse f [ ] = pure [ ]
+traverse f (x : xs) = pure (const (:))⊛f x⊛f x⊛traverse f xs
+
+Note that this definition still satisfies the purity law. However, it behaves strangely in the
+following sense: if the elements are indexed from zero upwards, and then the list of indices
+is extracted, the result is not an initial segment of the natural numbers.
+
+
+We might impose ‘no duplication’ as a further constraint on traversal, but the characterisation
+of the constraint in terms of indexing feels rather ad hoc; we are still searching
+for a nice theoretical treatment of this condition. For the time being, therefore, we propose
+to leave as an observation the fact that some odd definitions of traversal may duplicate
+elements.
+
+----
+
+## 6.2 Modular iterations, idiomatically
+
+In general, however, component traversals may not be so amenable to composition, and
+product may not be the appropriate combinator. Such a situation calls for sequential composition
+⊙ rather than parallel composition ⊗ of applicative functors alone. Here, however,
+we can’t directly compose querying with counting, because counting discards its argument;
+and neither can we compose counting with querying, because querying produces booleans
+and counting consumes characters. Instead, we have to use both sequential and parallel
+composition, preserving a copy of the input for querying in addition to counting it:
+wcqui′
+:: String → ((Id ⊠(M (State Bool)Count))Pair) [Bool]
+wcqui′ = traverse (quiBody⊙(Id ⊗wciBody))
+
+---
+
+6.3 Modular iterations, monadically
+
+
+The first snag is that none of the three slices is actually monadic; we have to cast them
+in the monadic mold first. The simple counting slices can be expressed using the Writer
+monad:
+
+Now let us turn to the Naperian traversal. That too can be expressed monadically: as
+observed in Section 3.1, a Naperian functor is equivalent to a Reader monad with the
+position being the ‘environment’. In particular, the Naperian applicative functor for the
+functor Pair is equivalent to the monad Reader Bool.
+
+We can’t form the parallel composition of this with word-counting, for the same reason as
+with the idiomatic approach: the element return types differ. But with monads, we can’t
+even form the sequential composition of the two traversals either: the two monads differ,
+and Kleisli composition requires two computations in the same monad
+
+quwcm:: String → StateT (Integer,Bool) (Reader Bool) [Bool]
+quwcm = mapM qumBody •qmapM wcmBody′ = mapM (qumBody •qwcmBody′
+
+This particular pair of monads composes just as well the other way around, because the
+types State s (Reader r a) and Reader r (State s a) are isomorphic. So we could instead
+use the ReaderT monad transformer to add Reader behaviour to the State monad, and use
+the dual composition operation p•. However, both cases are rather awkward, because they
+entail having to generalise (perhaps previously-written) components from types involving
+specific monads (such as State) to general monad interfaces (such as StateT). Writing the
+components that way in the first place might be good practice, but that rule is little comfort
+when faced with a body of code that breaks it. Moreover, the monad transformer approach
+works only for certain monads, not for all of them; in contrast, composition of applicative
+functors is universal.
+
+The upshot is that composition of applicative functors is more flexible than composition
+of monads.
